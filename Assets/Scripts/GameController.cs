@@ -20,6 +20,7 @@ public class GameController : MonoBehaviour {
 
     private Image[] gridIs = new Image[MAX_GRID_NUM];
     private Text[] gridTs = new Text[MAX_GRID_NUM];
+    private Text[] gridFlagTs = new Text[MAX_GRID_NUM];
 
     /// <summary>
     /// 是否展示地雷标记(用于测试)
@@ -27,9 +28,9 @@ public class GameController : MonoBehaviour {
     private bool showMine = true;
 
     /// <summary>
-    /// 是否已死亡
+    /// 是否游戏已结束
     /// </summary>
-    private bool PlayerDead = false;
+    private bool PlayEnd = false;
 
     /// <summary>
     /// 地雷位置数据
@@ -65,16 +66,16 @@ public class GameController : MonoBehaviour {
         //重置游戏
         ResetGame();
         //注册UI
-        root.Find("Reset_B").GetComponent<Button>().onClick.AddListener(ResetGame);
+        root.Find("Reset_B").GetComponent<Button>().onClick.AddListener(ResetGame);   
     }
-    
+
     /// <summary>
     /// 重置游戏
     /// </summary>
     private void ResetGame ()
     {
         //清空状态与数据
-        PlayerDead = false;
+        PlayEnd = false;
         
         MineData.Clear();
         TempGridData.Clear();
@@ -93,11 +94,12 @@ public class GameController : MonoBehaviour {
                 obj.name = i.ToString();
                 obj.transform.SetParent(bgP);
                 int index = i;
-                obj.GetComponent<Button>().onClick.AddListener(() => { OnClickGrid(index); });
                 gridIs[index] = obj.transform.Find("Mask").GetComponent<Image>();
                 gridTs[index] = obj.transform.Find("Info").GetComponent<Text>();
-                obj.transform.Find("Index").GetComponent<Text>().text = index.ToString();
-
+                gridFlagTs[index] = obj.transform.Find("Flag").GetComponent<Text>();
+                //obj.transform.Find("Index").GetComponent<Text>().text = index.ToString();
+                obj.GetComponent<ButtonClickExpand>().leftClick.AddListener(() => { OnLeftClickGrid(index); });
+                obj.GetComponent<ButtonClickExpand>().rightClick.AddListener(() => { OnRightClickGrid(index); });
                 obj.SetActive(true);
             }
         }
@@ -111,6 +113,7 @@ public class GameController : MonoBehaviour {
                 }
                 
                 gridTs[i].text = string.Empty;
+                gridFlagTs[i].text = string.Empty;
             }
         }
        
@@ -123,42 +126,133 @@ public class GameController : MonoBehaviour {
         {
             int tempCount = TempGridData.Count;
             int randomIndex = Random.Range(0, tempCount);
-            TempGridData.RemoveAt(randomIndex);
 
-            MineData.Add(randomIndex);
+            int mineIndex = TempGridData[randomIndex];
+            TempGridData.RemoveAt(randomIndex);
+            MineData.Add(mineIndex);
 
             if (showMine)
             {
-                gridIs[randomIndex].enabled = true;
+                gridIs[mineIndex].enabled = true;
             }
         }
 
+        //重置旗帜数量显示
+        root.Find("Flag_T").GetComponent<Text>().text = string.Format("{0}/{1}",FlagData.Count,MINE_NUM); 
 
         Debug.Log("Reset Game");
     }
 
-    private void OnClickGrid (int gridIndex)
+    /// <summary>
+    /// 左键点击Grid
+    /// </summary>
+    /// <param name="gridIndex"></param>
+    private void OnLeftClickGrid(int gridIndex)
     {
-        if (PlayerDead)
+        if (PlayEnd)
         {
-            Debug.Log("你已经挂了 请重新开始游戏");
+            Debug.Log("游戏结束 请重新开始游戏");
 
             return;
         }
 
-        Debug.Log("OnClickGrid ---- gridIndex:" + gridIndex);
+        Debug.Log("OnLeftClickGrid ---- gridIndex:" + gridIndex);
+
+        //如果该点已被Flag 则反转Flag
+        if (FlagData.Contains(gridIndex))
+        {
+            FlagData.Remove(gridIndex);
+
+            gridFlagTs[gridIndex].text = string.Empty;
+
+            //重置旗帜数量显示
+            root.Find("Flag_T").GetComponent<Text>().text = string.Format("{0}/{1}", FlagData.Count, MINE_NUM);
+
+            //如果旗帜数据与地雷数据一致 则获得游戏胜利
+            if (CheckIfWin())
+            {
+                PlayEnd = true;
+                //获胜了！
+                Debug.Log("你胜利了 请重新开始游戏");
+            }
+        }
 
         //该点为地雷点
         if (MineData.Contains(gridIndex))
         {
             gridTs[gridIndex].text = "Boom";
 
-            PlayerDead = true;
+            PlayEnd = true;
         }
         else
         {
             UpdateGridUI(gridIndex);
         }
+    }
+
+    /// <summary>
+    /// 右键点击Grid
+    /// </summary>
+    private void OnRightClickGrid (int gridIndex)
+    {
+        if (PlayEnd)
+        {
+            
+        }
+
+        //如果该点已经显示了 则无效
+        if (ShowData.Contains(gridIndex))
+        {
+            Debug.Log("该点已展示 请选择其他位置");
+
+            return;
+        }
+
+        Debug.Log("OnRightClickGrid ---- gridIndex:" + gridIndex);
+
+        //反转旗帜
+        if (FlagData.Contains(gridIndex))
+        {
+            FlagData.Remove(gridIndex);
+
+            gridFlagTs[gridIndex].text = string.Empty;
+        }
+        else
+        {
+            FlagData.Add(gridIndex);
+
+            gridFlagTs[gridIndex].text = "Flag";
+        }
+
+        //重置旗帜数量显示
+        root.Find("Flag_T").GetComponent<Text>().text = string.Format("{0}/{1}", FlagData.Count, MINE_NUM);
+
+        //如果旗帜数据与地雷数据一致 则获得游戏胜利
+        if (CheckIfWin())
+        {
+            PlayEnd = true;
+            //获胜了！
+            Debug.Log("你胜利了 请重新开始游戏");
+        }
+    }
+
+    private bool CheckIfWin ()
+    {
+        bool isWin = false;
+        //如果旗帜数据与地雷数据一致 则获得游戏胜利
+        if (FlagData.Count == MINE_NUM)
+        {
+            isWin = true;
+            for (int i = 0; i < MINE_NUM; i++)
+            {
+                if (!FlagData.Contains(MineData[i]))
+                {
+                    isWin = false;
+                    break;
+                }
+            }
+        }
+        return isWin;
     }
 
     private void UpdateGridUI (int gridIndex)
